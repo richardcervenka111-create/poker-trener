@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker tréner</title>
+<meta name="description" content="Tréner rozhodovania v No-Limit Hold'em bez peňazí: preflop podľa pozície, pot odds, bankroll a riziko krachu.">
+<style>
+:root{--bg:#0f1b14;--card:#16281e;--line:#27443a;--txt:#eef7f0;--mut:#9fbcaa;--acc:#5fe1a0;--warn:#ffcc55;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:17px/1.5 -apple-system,system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:24px;margin:6px 0 2px}.sub{color:var(--mut);font-size:14px;margin-bottom:14px}
+nav{display:flex;gap:8px;margin:10px 0 16px;flex-wrap:wrap}
+nav button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:15px;cursor:pointer;min-height:42px}
+nav button[aria-selected="true"]{background:var(--acc);color:#062;border-color:var(--acc);font-weight:700}
+section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:10px 0}
+.hand{font-size:44px;font-weight:800;letter-spacing:2px;text-align:center;margin:6px 0}
+.hand .r{color:var(--bad)}.hand .b{color:#fff}
+.pos{text-align:center;color:var(--mut)}
+.btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.btns button,button.big{background:#0c1710;color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:17px;cursor:pointer;min-height:52px}
+button.big{width:100%;margin-top:10px;background:var(--acc);color:#062;font-weight:700;border-color:var(--acc)}
+.fb{margin-top:12px;padding:12px;border-radius:10px;display:none}.fb.ok{display:block;background:#123d2a;border:1px solid var(--acc)}.fb.bad{display:block;background:#3d1c1c;border:1px solid var(--bad)}
+.score{color:var(--mut);font-size:14px;text-align:right}
+label{display:block;margin:10px 0 4px;color:var(--mut);font-size:14px}
+input,select{width:100%;font-size:17px;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0c1710;color:var(--txt)}
+.out{font-size:18px;margin-top:12px}.out b{color:var(--acc)}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.k div{background:#0c1710;border-radius:10px;padding:10px}.k b{display:block;font-size:22px}.k span{color:var(--mut);font-size:13px}
+.warn{color:var(--warn)}.bad{color:var(--bad)}
+ul{padding-left:20px}li{margin:6px 0}
+.foot{color:var(--mut);font-size:13px;margin-top:24px;border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+<h1>Poker tréner</h1>
+<div class="sub">No-Limit Hold'em, 6 hráčov. Bez peňazí, bez účtu. Učí rozhodnutia, ktoré dlhodobo rozhodujú o zisku.</div>
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-t="pre">Preflop</button>
+  <button role="tab" aria-selected="false" data-t="odds">Pot odds</button>
+  <button role="tab" aria-selected="false" data-t="bank">Bankroll</button>
+  <button role="tab" aria-selected="false" data-t="rules">Pravidlá zisku</button>
+</nav>
+
+<section id="pre" class="on">
+  <div class="card">
+    <div class="pos" id="pos">…</div>
+    <div class="hand" id="hand">…</div>
+    <div class="pos">Pred tebou nikto nevstúpil (všetci zložili). Čo urobíš?</div>
+    <div class="btns"><button data-a="fold">Fold</button><button data-a="raise">Raise</button><button data-a="limp">Limp (call)</button></div>
+    <div class="fb" id="fb"></div>
+    <div class="score" id="score">0 / 0</div>
+  </div>
+  <div class="card" style="color:var(--mut);font-size:14px">Model: jednoduchý „open-raise" rozsah pre mikrolimity: UTG 15 %, MP 18 %, CO 27 %, BTN 45 %, SB 35 % najlepších rúk. Limp nie je nikdy správne, keď pred tebou nikto nevstúpil: buď má ruka hodnotu na raise, alebo na fold. Rozsahy sú zjednodušené, ale smer je správny: tesne skoro, široko na buttone.</div>
+</section>
+
+<section id="odds">
+  <div class="card">
+    <div id="oddsQ" style="font-size:18px"></div>
+    <div class="btns" style="grid-template-columns:1fr 1fr"><button data-o="call">Call</button><button data-o="fold">Fold</button></div>
+    <div class="fb" id="ofb"></div>
+    <div class="score" id="oscore">0 / 0</div>
+  </div>
+  <div class="card" style="color:var(--mut);font-size:14px">Pravidlo: call sa oplatí, keď pravdepodobnosť dorovnania (outs × 2 % na jednu kartu, × 4 % na dve) je vyššia než podiel, ktorý platíš: <b style="color:var(--txt)">stávka ÷ (pot + stávka)</b>. Bez implied odds, čisto matematika.</div>
+</section>
+
+<section id="bank">
+  <div class="card">
+    <label>Bankroll (CHF)</label><input id="br" type="number" value="20" min="1" step="1" inputmode="decimal">
+    <label>Buy-in za stôl (CHF), typicky 100 big blindov</label><input id="bi" type="number" value="2" min="0.5" step="0.5" inputmode="decimal">
+    <label>Tvoj dlhodobý zisk (bb/100 rúk). Začiatočník: záporný. Dobrý mikro hráč: 3 až 8.</label><input id="wr" type="number" value="3" step="0.5" inputmode="decimal">
+    <label>Rozptyl (štandardná odchýlka v bb/100). Cash game typicky 80 až 100.</label><input id="sd" type="number" value="90" step="5" inputmode="decimal">
+    <button class="big" id="calc">Vypočítať riziko</button>
+    <div class="k"><div><b id="bis">–</b><span>buy-inov v bankrolle</span></div><div><b id="ror">–</b><span>riziko krachu</span></div><div><b id="need">–</b><span>bankroll pre 5 % riziko</span></div></div>
+    <div class="out" id="verdict"></div>
+  </div>
+  <div class="card" style="color:var(--mut);font-size:14px">Vzorec: riziko krachu ≈ exp(−2 · zisk · bankroll ÷ rozptyl²), všetko v big blindoch. Je to štandardná aproximácia pre hru s kladným očakávaním; pri zápornom zisku je riziko 100 %, otázka je len kedy.</div>
+</section>
+
+<section id="rules">
+  <div class="card"><ul>
+    <li><b>Hraj menej rúk, než sa ti chce.</b> Na mikrolimitoch vyhráva ten, kto vstupuje s lepšou rukou, nie ten, kto blafuje.</li>
+    <li><b>Pozícia je peniaz.</b> Na buttone konáš posledný a vidíš, čo urobili ostatní. Tam hraj široko, na UTG tesne.</li>
+    <li><b>Raise alebo fold, nie limp.</b> Kto dorovnáva bez iniciatívy, prehráva dvakrát: menší pot, keď vyhrá, väčšia strata, keď prehrá.</li>
+    <li><b>Neblafuj hráčov, ktorí nikdy neskladajú.</b> Na mikrolimitoch ich je väčšina. Stávkuj za hodnotu, nie za príbeh.</li>
+    <li><b>Bankroll: 25 buy-inov a viac.</b> S menej ako 20 ťa aj dobrá hra s vysokou pravdepodobnosťou vynuluje.</li>
+    <li><b>Stop-loss na session:</b> 3 buy-iny dole = koniec. Tilt stojí viac než variancia.</li>
+    <li><b>Zapisuj si výsledky.</b> Bez čísel nevieš, či si ziskový, len či si mal šťastie.</li>
+    <li><b>Legálne:</b> vo Švajčiarsku sú povolené len prevádzkovatelia s licenciou ESBK. Iné stránky sú blokované a peniaze na nich nechránené.</li>
+  </ul></div>
+</section>
+
+<div class="foot">Žiadne peniaze, žiadny účet, žiadne sledovanie. Tréning rozhodnutí, nie návod na zárobok: poker je hra s rozptylom a väčšina hráčov dlhodobo prehráva.</div>
+</main>
+<script>
+(function(){
+const R="AKQJT98765432";
+// rozsahy (169 kombinácií) – zjednodušené open-raise podľa pozície
+const RANK={};
+const order=["AA","KK","QQ","AKs","JJ","AKo","AQs","TT","AQo","AJs","KQs","99","ATs","AJo","KJs","KQo","88","QJs","KTs","A9s","ATo","JTs","77","QTs","KJo","A8s","QJo","A5s","A4s","66","A7s","J9s","T9s","A3s","KTo","A2s","55","A6s","QTo","K9s","JTo","98s","Q9s","44","T8s","A9o","J8s","33","K8s","87s","22","97s","K7s","76s","T9o","K6s","A8o","Q8s","K5s","86s","65s","J9o","K4s","98o","T7s","54s","K3s","Q7s","A7o","K2s","75s","J7s","Q6s","A5o","64s","A6o","T8o","Q5s","J8o","A4o","96s","53s","Q4s","A3o","87o","K9o","Q3s","85s","J6s","A2o","43s","Q2s","J5s","T6s","97o","J4s","76o","K8o","74s","J3s","Q9o","63s","J2s","T5s","86o","T4s","52s","65o","95s","T3s","K7o","T2s","42s","75o","54o","K6o","84s","Q8o","94s","J7o","K5o","32s","93s","64o","K4o","T7o","73s","Q7o","92s","K3o","62s","Q6o","83s","J6o","82s","K2o","72s","53o","Q5o","96o","85o","J5o","Q4o","43o","T6o","J4o","Q3o","74o","J3o","63o","Q2o","95o","T5o","J2o","52o","T4o","84o","T3o","42o","94o","T2o","93o","73o","32o","92o","83o","62o","82o","72o"];
+order.forEach((h,i)=>RANK[h]=i);
+const POS=[["UTG",0.15],["MP",0.18],["CO",0.27],["BTN",0.45],["SB",0.35]];
+let q=null, ok=0, n=0;
+const $=id=>document.getElementById(id);
+function deal(){ const a=R[Math.floor(Math.random()*13)], b=R[Math.floor(Math.random()*13)]; const suited=a!==b&&Math.random()<0.25;
+  const hi=R.indexOf(a)<=R.indexOf(b)?a:b, lo=hi===a?b:a; const key=a===b?a+b:hi+lo+(suited?"s":"o"); const p=POS[Math.floor(Math.random()*POS.length)];
+  q={key,pos:p[0],pct:p[1],suited,a:hi,b:lo};
+  const s1=["♠","♥","♦","♣"][Math.floor(Math.random()*4)]; let s2=s1; if(!suited&&a!==b){ do{s2=["♠","♥","♦","♣"][Math.floor(Math.random()*4)];}while(s2===s1);} if(a===b){do{s2=["♠","♥","♦","♣"][Math.floor(Math.random()*4)];}while(s2===s1);}
+  const col=s=>(s==="♥"||s==="♦")?"r":"b";
+  $("hand").innerHTML=`<span class="${col(s1)}">${hi}${s1}</span> <span class="${col(s2)}">${lo}${s2}</span>`;
+  $("pos").textContent=`Pozícia: ${p[0]} (${p[0]==="UTG"?"prvý na rade":p[0]==="MP"?"stred":p[0]==="CO"?"cut-off":p[0]==="BTN"?"button, konáš posledný":"small blind"})`;
+  $("fb").className="fb"; }
+function answer(a){ const rank=RANK[q.key]; const inRange=rank < Math.round(169*q.pct); const correct=inRange?"raise":"fold"; n++; if(a===correct) ok++;
+  const fb=$("fb"); fb.className="fb "+(a===correct?"ok":"bad");
+  fb.innerHTML=(a===correct?"Správne. ":"Nie. ")+`${q.key} je ${rank+1}. najlepšia z 169 kombinácií. Na ${q.pos} otváraš najlepších ${Math.round(q.pct*100)} % → <b>${correct.toUpperCase()}</b>.`+(a==="limp"?" Limp bez iniciatívy je vždy horší než raise alebo fold.":"");
+  $("score").textContent=`${ok} / ${n}`; setTimeout(deal,1800); }
+document.querySelectorAll("#pre .btns button").forEach(b=>b.addEventListener("click",()=>answer(b.dataset.a)));
+deal();
+
+// pot odds
+let o=null, ook=0, on=0;
+const draws=[["otvorený straight draw",8],["flush draw",9],["gutshot",4],["flush draw + gutshot",12],["dva overcards",6],["set draw (pocket pár)",2]];
+function dealOdds(){ const pot=[20,40,60,80,100][Math.floor(Math.random()*5)], bet=[10,20,30,50,80,100][Math.floor(Math.random()*6)], d=draws[Math.floor(Math.random()*draws.length)], street=Math.random()<0.5?"flop":"turn";
+  o={pot,bet,outs:d[1],street,name:d[0]}; $("oddsQ").innerHTML=`Na ${street}e máš <b>${d[0]}</b> (${d[1]} outov). V pote je <b>${pot}</b>, súper stávkuje <b>${bet}</b>. Uvidíš ${street==="flop"?"ešte dve karty":"jednu kartu"}, ale zaplatiť musíš teraz a súper ďalej nič nedá. Call alebo fold?`; $("ofb").className="fb"; }
+function answerOdds(a){ const eq=o.street==="flop"?Math.min(0.95,o.outs*0.04):o.outs*0.02; const price=o.bet/(o.pot+o.bet); const correct=eq>price?"call":"fold"; on++; if(a===correct) ook++;
+  const fb=$("ofb"); fb.className="fb "+(a===correct?"ok":"bad"); fb.innerHTML=(a===correct?"Správne. ":"Nie. ")+`Šanca dorovnať ≈ <b>${Math.round(eq*100)} %</b>, platíš <b>${Math.round(price*100)} %</b> potu → <b>${correct.toUpperCase()}</b>.`; $("oscore").textContent=`${ook} / ${on}`; setTimeout(dealOdds,2200); }
+document.querySelectorAll("#odds .btns button").forEach(b=>b.addEventListener("click",()=>answerOdds(b.dataset.o)));
+dealOdds();
+
+// bankroll
+function calc(){ const br=+$("br").value, bi=+$("bi").value, wr=+$("wr").value, sd=+$("sd").value; if(!(br>0&&bi>0&&sd>0)) return;
+  const bb=bi/100, brbb=br/bb, bis=br/bi; let ror; if(wr<=0) ror=1; else ror=Math.exp(-2*wr*brbb/(sd*sd));
+  const needbb=wr>0?(-Math.log(0.05)*sd*sd/(2*wr)):Infinity; const need=needbb*bb;
+  $("bis").textContent=bis.toFixed(1); $("ror").textContent=(ror*100).toFixed(ror>0.995?0:1)+" %"; $("need").textContent=isFinite(need)?"CHF "+Math.ceil(need):"∞";
+  const v=$("verdict"); if(wr<=0) v.innerHTML=`<span class="bad">Pri nulovom alebo zápornom zisku je krach istý.</span> Najprv sa nauč hrať ziskovo (Preflop a Pot odds), potom rieš peniaze.`;
+  else if(ror>0.2) v.innerHTML=`<span class="bad">Riziko ${Math.round(ror*100)} %: príliš vysoké.</span> S CHF ${br} máš ${bis.toFixed(1)} buy-inov. Buď nižší limit (menší buy-in), alebo väčší bankroll: na 5 % riziko treba CHF ${Math.ceil(need)}.`;
+  else if(ror>0.05) v.innerHTML=`<span class="warn">Riziko ${Math.round(ror*100)} %: hraničné.</span> Odporúčaný bankroll pre 5 % je CHF ${Math.ceil(need)}.`;
+  else v.innerHTML=`<b>Riziko ${(ror*100).toFixed(1)} %: v poriadku</b> pri tomto zisku a rozptyle. Podmienka: zisk ${wr} bb/100 musí byť skutočne zmeraný na tisícoch rúk, nie odhadnutý.`; }
+$("calc").addEventListener("click",calc); calc();
+
+// taby
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{ document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected",x===b?"true":"false")); document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===b.dataset.t)); }));
+})();
+</script>
+</body>
+</html>
